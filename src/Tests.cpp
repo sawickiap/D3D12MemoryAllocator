@@ -4726,14 +4726,224 @@ static void TestGroupDefragmentation(const TestContext& ctx)
     TestDefragmentationIncrementalComplex(ctx);
 }
 
+void SpecialTest(const TestContext& ctx)
+{
+    wprintf(L"SpecialTest\n");
+
+    constexpr uint32_t BUFFER_SIZE = 1024 * 1024 * 1024; // 1 GB
+    constexpr uint32_t LOAD_OFFSET = BUFFER_SIZE + 4096;
+    constexpr bool USE_GOOD_DESCRIPTOR = false;
+
+    using namespace D3D12MA;
+
+    wprintf(L"BUFFER_SIZE = 0x%08X\n", BUFFER_SIZE);
+    wprintf(L"LOAD_OFFSET = 0x%08X\n", LOAD_OFFSET);
+    wprintf(L"USE_GOOD_DESCRIPTOR = %d\n", int(USE_GOOD_DESCRIPTOR));
+
+    std::vector<char> shader_data;
+    ReadFile(shader_data, L"../src/Shaders/SpecialCS.dxil");
+    assert(!shader_data.empty());
+
+    // Create a CBV in UPLOAD heap to hold just 1 uint. Use D3D12MA for that.
+    ComPtr<Allocation> cbAlloc;
+    ComPtr<ID3D12Resource> cbResource;
+    {
+        const UINT64 cbRawSize = sizeof(UINT);
+        const UINT64 cbSize = AlignUp<UINT64>(cbRawSize, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+
+        D3D12_RESOURCE_DESC cbDesc = {};
+        FillResourceDescForBuffer(cbDesc, cbSize);
+
+        CALLOCATION_DESC allocDesc = CALLOCATION_DESC{D3D12_HEAP_TYPE_UPLOAD};
+
+        CHECK_HR(ctx.allocator->CreateResource(&allocDesc, &cbDesc, D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr, &cbAlloc, IID_PPV_ARGS(&cbResource)));
+
+        // Map and write uint value
+        void* mapped = nullptr;
+        D3D12_RANGE readRange = { 0, 0 };
+        CHECK_HR(cbResource->Map(0, &readRange, &mapped));
+        UINT* p = (UINT*)mapped;
+        p[0] = LOAD_OFFSET;
+        cbResource->Unmap(0, nullptr);
+    }
+
+    // Create a 1 GB buffer to be used as UAV. Use D3D12MA for that.
+    ComPtr<Allocation> uavAlloc;
+    ComPtr<ID3D12Resource> uavResource;
+    {
+        D3D12_RESOURCE_DESC resDesc = {};
+        FillResourceDescForBuffer(resDesc, BUFFER_SIZE);
+        resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+        CALLOCATION_DESC allocDesc = CALLOCATION_DESC{ D3D12_HEAP_TYPE_DEFAULT };
+
+        CHECK_HR(ctx.allocator->CreateResource(&allocDesc, &resDesc,
+            D3D12_RESOURCE_STATE_COMMON, nullptr, &uavAlloc, IID_PPV_ARGS(&uavResource)));
+
+        wprintf(L"Buffer GPU address = 0x%08llX\n", uavResource->GetGPUVirtualAddress());
+        wprintf(L"Buffer GPU end address = 0x%08llX\n", uavResource->GetGPUVirtualAddress() + BUFFER_SIZE);
+        wprintf(L"Buffer GPU address + load_offset = 0x%08llX\n", uavResource->GetGPUVirtualAddress() + LOAD_OFFSET);
+
+    }
+
+    // Create a descriptor heap just for 1 CBV b0 and 1 UAV u0.
+    ComPtr<ID3D12DescriptorHeap> descHeap;
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+        heapDesc.NumDescriptors = 2;
+        heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        heapDesc.NodeMask = 0;
+        CHECK_HR(ctx.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&descHeap)));
+    }
+
+
+    const UINT descriptorSize = ctx.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuStart = descHeap->GetCPUDescriptorHandleForHeapStart();
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuStart = descHeap->GetGPUDescriptorHandleForHeapStart();
+
+    // Create CBV at descriptor 0
+    {
+        D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+        cbvDesc.BufferLocation = cbResource->GetGPUVirtualAddress();
+        // SizeInBytes must be multiple of 256
+        cbvDesc.SizeInBytes = (UINT)AlignUp<UINT64>(sizeof(UINT), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+        ctx.device->CreateConstantBufferView(&cbvDesc, cpuStart);
+    }
+
+    // Create UAV at descriptor 1
+    {
+        D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+        uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+        uavDesc.Buffer.FirstElement = 0;
+        uavDesc.Buffer.NumElements = (UINT)( (uavResource->GetDesc().Width) / sizeof(UINT) );
+        uavDesc.Buffer.StructureByteStride = 0; // Zero for both raw and typed buffer.
+        uavDesc.Buffer.CounterOffsetInBytes = 0;
+
+        if(USE_GOOD_DESCRIPTOR)
+        {
+            // Declare proper ByteAdddress (raw) buffer.
+            uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+            uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+        }
+        else
+        {
+            // Declare typed buffer.
+            uavDesc.Format = DXGI_FORMAT_R32_UINT;
+            uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+        }
+
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuUavHandle = cpuStart;
+        cpuUavHandle.ptr += descriptorSize * 1;
+        // Create UAV (no counter resource)
+        ctx.device->CreateUnorderedAccessView(uavResource.Get(), nullptr, &uavDesc, cpuUavHandle);
+    }
+
+    // Create a compute root signature with:
+    //  - descriptor table (CBV at b0)
+    //  - descriptor table (UAV at u0)
+    ComPtr<ID3D12RootSignature> rootSignature;
+    {
+        D3D12_DESCRIPTOR_RANGE cbvRange = {};
+        cbvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+        cbvRange.NumDescriptors = 1;
+        cbvRange.BaseShaderRegister = 0;
+        cbvRange.RegisterSpace = 0;
+        cbvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_DESCRIPTOR_RANGE uavRange = {};
+        uavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+        uavRange.NumDescriptors = 1;
+        uavRange.BaseShaderRegister = 0;
+        uavRange.RegisterSpace = 0;
+        uavRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+        D3D12_ROOT_PARAMETER params[2] = {};
+        params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        params[0].DescriptorTable.NumDescriptorRanges = 1;
+        params[0].DescriptorTable.pDescriptorRanges = &cbvRange;
+        params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        params[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        params[1].DescriptorTable.NumDescriptorRanges = 1;
+        params[1].DescriptorTable.pDescriptorRanges = &uavRange;
+        params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+        D3D12_ROOT_SIGNATURE_DESC rsDesc = {};
+        rsDesc.NumParameters = _countof(params);
+        rsDesc.pParameters = params;
+        rsDesc.NumStaticSamplers = 0;
+        rsDesc.pStaticSamplers = nullptr;
+        rsDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+        ComPtr<ID3DBlob> sigBlob, errorBlob;
+        CHECK_HR(D3D12SerializeRootSignature(&rsDesc, D3D_ROOT_SIGNATURE_VERSION_1, &sigBlob, &errorBlob));
+        CHECK_HR(ctx.device->CreateRootSignature(0, sigBlob->GetBufferPointer(), sigBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+    }
+
+    // Create a compute pipeline state object using shader_data.
+    ComPtr<ID3D12PipelineState> pso;
+    {
+        D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
+        desc.pRootSignature = rootSignature.Get();
+        desc.CS.pShaderBytecode = shader_data.data();
+        desc.CS.BytecodeLength = shader_data.size();
+        desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        CHECK_HR(ctx.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pso)));
+    }
+
+    fflush(stdout);
+    Sleep(500);
+
+    // Record commands: set descriptor heap, root signature, descriptor tables, dispatch.
+    ID3D12GraphicsCommandList* cmd_list = BeginCommandList();
+
+    // Transition UAV to UAV state
+    {
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource = uavResource.Get();
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        cmd_list->ResourceBarrier(1, &barrier);
+    }
+
+    ID3D12DescriptorHeap* heaps[] = { descHeap.Get() };
+    cmd_list->SetDescriptorHeaps(1, heaps);
+
+    cmd_list->SetComputeRootSignature(rootSignature.Get());
+
+    // GPU handles: CBV at offset 0, UAV at offset 1
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuCbv = gpuStart;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuUav = gpuStart;
+    gpuUav.ptr += descriptorSize * 1;
+
+    // Root parameter 0 -> CBV table, 1 -> UAV table
+    cmd_list->SetComputeRootDescriptorTable(0, gpuCbv);
+    cmd_list->SetComputeRootDescriptorTable(1, gpuUav);
+
+    cmd_list->SetPipelineState(pso.Get());
+
+    // Dispatch a single group
+    cmd_list->Dispatch(1, 1, 1);
+
+    EndCommandList(cmd_list);
+
+    wprintf(L"SpecialTest done.\n");
+}
+
 void Test(const TestContext& ctx)
 {
     wprintf(L"TESTS BEGIN\n");
 
-    if(false)
+    if(true)
     {
         ////////////////////////////////////////////////////////////////////////////////
         // Temporarily insert custom tests here:
+        SpecialTest(ctx);
         return;
     }
 
