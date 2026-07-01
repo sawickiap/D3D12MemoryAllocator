@@ -6234,7 +6234,7 @@ public:
     void CalculateStatistics(TotalStatistics& outStats, DetailedStatistics outCustomHeaps[2] = NULL);
 
     void GetBudget(Budget* outLocalBudget, Budget* outNonLocalBudget);
-    void GetBudgetForHeapType(Budget& outBudget, D3D12_HEAP_TYPE heapType);
+    void GetBudgetForHeapProperties(Budget& outBudget, const D3D12_HEAP_PROPERTIES& heapProps);
 
     void BuildStatsString(WCHAR** ppStatsString, BOOL detailedMap);
     void FreeStatsString(WCHAR* pStatsString);
@@ -6356,7 +6356,7 @@ private:
 
     bool IsTightAlignmentEnabled(const ALLOCATION_DESC& allocDesc) const;
 
-    bool NewAllocationWithinBudget(D3D12_HEAP_TYPE heapType, UINT64 size);
+        bool NewAllocationWithinBudget(const D3D12_HEAP_PROPERTIES& heapProps, UINT64 size);
 
     // Writes object { } with data of given budget.
     static void WriteBudgetToJson(JsonWriter& json, const Budget& budget);
@@ -7115,9 +7115,9 @@ void AllocatorPimpl::GetBudget(Budget* outLocalBudget, Budget* outNonLocalBudget
     }
 }
 
-void AllocatorPimpl::GetBudgetForHeapType(Budget& outBudget, D3D12_HEAP_TYPE heapType)
+void AllocatorPimpl::GetBudgetForHeapProperties(Budget& outBudget, const D3D12_HEAP_PROPERTIES& heapProps)
 {
-    const bool isLocal = StandardHeapTypeToMemorySegmentGroup(heapType) ==
+    const bool isLocal = HeapPropertiesToMemorySegmentGroup(heapProps) ==
         DXGI_MEMORY_SEGMENT_GROUP_LOCAL_COPY;
     if (isLocal)
     {
@@ -7546,7 +7546,7 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
     }
 
     if (withinBudget &&
-        !NewAllocationWithinBudget(committedAllocParams.m_HeapProperties.Type, resourceSize))
+        !NewAllocationWithinBudget(committedAllocParams.m_HeapProperties, resourceSize))
     {
         return E_OUTOFMEMORY;
     }
@@ -7684,7 +7684,7 @@ HRESULT AllocatorPimpl::AllocateHeap(
     *ppAllocation = nullptr;
 
     if (withinBudget &&
-        !NewAllocationWithinBudget(committedAllocParams.m_HeapProperties.Type, allocInfo.SizeInBytes))
+        !NewAllocationWithinBudget(committedAllocParams.m_HeapProperties, allocInfo.SizeInBytes))
     {
         return E_OUTOFMEMORY;
     }
@@ -8135,14 +8135,13 @@ bool AllocatorPimpl::PrefersCommittedAllocationOverBudget(
     const CommittedAllocationParameters& committedAllocParams,
     UINT64 allocSize)
 {
-    const D3D12_HEAP_TYPE heapType = committedAllocParams.m_HeapProperties.Type;
-    return IsHeapTypeStandard(heapType) && !NewAllocationWithinBudget(heapType, allocSize);
+    return !NewAllocationWithinBudget(committedAllocParams.m_HeapProperties, allocSize);
 }
 
-bool AllocatorPimpl::NewAllocationWithinBudget(D3D12_HEAP_TYPE heapType, UINT64 size)
+bool AllocatorPimpl::NewAllocationWithinBudget(const D3D12_HEAP_PROPERTIES& heapProps, UINT64 size)
 {
     Budget budget = {};
-    GetBudgetForHeapType(budget, heapType);
+    GetBudgetForHeapProperties(budget, heapProps);
     return budget.UsageBytes + size <= budget.BudgetBytes;
 }
 
@@ -8500,7 +8499,7 @@ void BlockVector::Free(Allocation* hAllocation)
     if (IsHeapTypeStandard(m_HeapProps.Type))
     {
         Budget budget = {};
-        m_hAllocator->GetBudgetForHeapType(budget, m_HeapProps.Type);
+        m_hAllocator->GetBudgetForHeapProperties(budget, m_HeapProps);
         budgetExceeded = budget.UsageBytes >= budget.BudgetBytes;
     }
 
@@ -8720,11 +8719,10 @@ HRESULT BlockVector::AllocatePage(
         return E_OUTOFMEMORY;
     }
 
-    UINT64 freeMemory = UINT64_MAX;
-    if (IsHeapTypeStandard(m_HeapProps.Type))
+        UINT64 freeMemory = UINT64_MAX;
     {
         Budget budget = {};
-        m_hAllocator->GetBudgetForHeapType(budget, m_HeapProps.Type);
+        m_hAllocator->GetBudgetForHeapProperties(budget, m_HeapProps);
         freeMemory = (budget.UsageBytes < budget.BudgetBytes) ? (budget.BudgetBytes - budget.UsageBytes) : 0;
     }
 
