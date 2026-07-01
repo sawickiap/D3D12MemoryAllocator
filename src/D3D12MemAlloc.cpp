@@ -7755,16 +7755,20 @@ HRESULT AllocatorPimpl::CalcAllocationParams(const ALLOCATION_DESC& allocDesc, U
         if (defaultPoolIndex != UINT32_MAX)
         {
             outBlockVector = m_BlockVectors[defaultPoolIndex];
-            const UINT64 preferredBlockSize = outBlockVector->GetPreferredBlockSize();
-            if (allocSize > preferredBlockSize)
-            {
-                outBlockVector = NULL;
-            }
-            else if (allocSize > preferredBlockSize / 2)
-            {
-                // Heuristics: Allocate committed memory if requested size if greater than half of preferred block size.
-                outPreferCommitted = true;
-            }
+        }
+    }
+
+    if(outBlockVector != NULL && outCommittedAllocationParams.m_List != NULL)
+    {
+        const UINT64 preferredBlockSize = outBlockVector->GetPreferredBlockSize();
+        if (allocSize > preferredBlockSize)
+        {
+            outBlockVector = NULL;
+        }
+        else if (allocSize > preferredBlockSize / 2)
+        {
+            // Heuristics: Allocate committed memory if requested size if greater than half of preferred block size.
+            outPreferCommitted = true;
         }
     }
 
