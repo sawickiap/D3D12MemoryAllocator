@@ -5777,7 +5777,6 @@ public:
         UINT64 size,
         UINT64 alignment,
         const ALLOCATION_DESC& allocDesc,
-        bool committedAllowed,
         size_t allocationCount,
         Allocation** pAllocations);
 
@@ -5788,7 +5787,6 @@ public:
         UINT64 alignment,
         const ALLOCATION_DESC& allocDesc,
         const CREATE_RESOURCE_PARAMS& createParams,
-        bool committedAllowed,
         Allocation** ppAllocation,
         REFIID riidResource,
         void** ppvResource);
@@ -5839,7 +5837,6 @@ private:
         UINT64 size,
         UINT64 alignment,
         const ALLOCATION_DESC& allocDesc,
-        bool committedAllowed,
         Allocation** pAllocation);
 
     HRESULT AllocateFromBlock(
@@ -6319,6 +6316,9 @@ private:
         const D3D12_RESOURCE_DESC_T* resDesc, // Optional
         bool useTightAlignment,
         BlockVector*& outBlockVector, CommittedAllocationParameters& outCommittedAllocationParams, bool& outPreferCommitted);
+    bool PrefersCommittedAllocationOverBudget(
+        const CommittedAllocationParameters& committedAllocParams,
+        UINT64 allocSize);
 
     // Returns UINT32_MAX if index cannot be calculcated.
     UINT CalcDefaultPoolIndex(const ALLOCATION_DESC& allocDesc, ResourceClass resourceClass) const;
@@ -6758,7 +6758,7 @@ HRESULT AllocatorPimpl::CreateResource(
     if (blockVector != NULL)
     {
         hr = blockVector->CreateResource(resAllocInfo.SizeInBytes, resAllocInfo.Alignment,
-            *pAllocDesc, finalCreateParams, committedAllocationParams.IsValid(),
+            *pAllocDesc, finalCreateParams,
             ppAllocation, riidResource, ppvResource);
         if (SUCCEEDED(hr))
             return hr;
@@ -6802,7 +6802,7 @@ HRESULT AllocatorPimpl::AllocateMemory(
     if (blockVector != NULL)
     {
         hr = blockVector->Allocate(pAllocInfo->SizeInBytes, pAllocInfo->Alignment,
-            *pAllocDesc, committedAllocationParams.IsValid(), 1, (Allocation**)ppAllocation);
+            *pAllocDesc, 1, (Allocation**)ppAllocation);
         if (SUCCEEDED(hr))
             return hr;
     }
@@ -7788,6 +7788,15 @@ HRESULT AllocatorPimpl::CalcAllocationParams(const ALLOCATION_DESC& allocDesc, U
         }
     }
 
+    if (!outPreferCommitted &&
+        outBlockVector != NULL &&
+        outCommittedAllocationParams.m_List != NULL &&
+        PrefersCommittedAllocationOverBudget(outCommittedAllocationParams, allocSize))
+    {
+        // Prefer committed allocation over creating a new placed block that would exceed current budget.
+        outPreferCommitted = true;
+    }
+
     if ((allocDesc.Flags & ALLOCATION_FLAG_COMMITTED) != 0 ||
         m_AlwaysCommitted)
     {
@@ -8122,6 +8131,14 @@ bool AllocatorPimpl::IsTightAlignmentEnabled(const ALLOCATION_DESC& allocDesc) c
     return true;
 }
 
+bool AllocatorPimpl::PrefersCommittedAllocationOverBudget(
+    const CommittedAllocationParameters& committedAllocParams,
+    UINT64 allocSize)
+{
+    const D3D12_HEAP_TYPE heapType = committedAllocParams.m_HeapProperties.Type;
+    return IsHeapTypeStandard(heapType) && !NewAllocationWithinBudget(heapType, allocSize);
+}
+
 bool AllocatorPimpl::NewAllocationWithinBudget(D3D12_HEAP_TYPE heapType, UINT64 size)
 {
     Budget budget = {};
@@ -8440,7 +8457,6 @@ HRESULT BlockVector::Allocate(
     UINT64 size,
     UINT64 alignment,
     const ALLOCATION_DESC& allocDesc,
-    bool committedAllowed,
     size_t allocationCount,
     Allocation** pAllocations)
 {
@@ -8455,7 +8471,6 @@ HRESULT BlockVector::Allocate(
                 size,
                 alignment,
                 allocDesc,
-                committedAllowed,
                 pAllocations + allocIndex);
             if (FAILED(hr))
             {
@@ -8544,12 +8559,11 @@ HRESULT BlockVector::CreateResource(
     UINT64 alignment,
     const ALLOCATION_DESC& allocDesc,
     const CREATE_RESOURCE_PARAMS& createParams,
-    bool committedAllowed,
     Allocation** ppAllocation,
     REFIID riidResource,
     void** ppvResource)
 {
-    HRESULT hr = Allocate(size, alignment, allocDesc, committedAllowed, 1, ppAllocation);
+    HRESULT hr = Allocate(size, alignment, allocDesc, 1, ppAllocation);
     if (FAILED(hr))
     {
         return hr;
@@ -8698,7 +8712,6 @@ HRESULT BlockVector::AllocatePage(
     UINT64 size,
     UINT64 alignment,
     const ALLOCATION_DESC& allocDesc,
-    bool committedAllowed,
     Allocation** pAllocation)
 {
     // Early reject: requested allocation size is larger that maximum block size for this block vector.
@@ -8715,19 +8728,11 @@ HRESULT BlockVector::AllocatePage(
         freeMemory = (budget.UsageBytes < budget.BudgetBytes) ? (budget.BudgetBytes - budget.UsageBytes) : 0;
     }
 
-    const bool canExceedFreeMemory = !committedAllowed;
+    const bool canExceedFreeMemory = (allocDesc.Flags & ALLOCATION_FLAG_WITHIN_BUDGET) == 0;
 
-    bool canCreateNewBlock =
+    const bool canCreateNewBlock =
         ((allocDesc.Flags & ALLOCATION_FLAG_NEVER_ALLOCATE) == 0) &&
         (m_Blocks.size() < m_MaxBlockCount);
-
-    // Even if we don't have to stay within budget with this allocation, when the
-    // budget would be exceeded, we don't want to allocate new blocks, but always
-    // create resources as committed.
-    if (freeMemory < size && !canExceedFreeMemory)
-    {
-        canCreateNewBlock = false;
-    }
 
     // 1. Search existing allocations
     {
