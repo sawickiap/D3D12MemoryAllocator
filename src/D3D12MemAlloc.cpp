@@ -6303,7 +6303,10 @@ private:
         UINT64 resourceSize, bool withinBudget, void* pPrivateData,
         const CREATE_RESOURCE_PARAMS& createParams,
         Allocation** ppAllocation, REFIID riidResource, void** ppvResource);
-
+    HRESULT CreateCommittedResourceWrap(
+        const CommittedAllocationParameters& committedAllocParams,
+        const CREATE_RESOURCE_PARAMS& createParams,
+        ID3D12Resource** ppResource);
     // Allocates and registers new heap without any resources placed in it, as dedicated allocation.
     // Creates and returns Allocation object.
     HRESULT AllocateHeap(
@@ -7548,6 +7551,48 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
         return E_OUTOFMEMORY;
     }
 
+    hr = CreateCommittedResourceWrap(committedAllocParams, createParams, &res);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    SetResidencyPriority(res, committedAllocParams.m_ResidencyPriority);
+
+    if (ppvResource != NULL)
+    {
+        hr = res->QueryInterface(riidResource, ppvResource);
+    }
+    if (SUCCEEDED(hr))
+    {
+        Allocation* alloc = m_AllocationObjectAllocator.Allocate(
+            this, resourceSize, createParams.GetBaseResourceDesc()->Alignment);
+        alloc->InitCommitted(committedAllocParams.m_List);
+        alloc->SetResourcePointer(res, createParams.GetBaseResourceDesc());
+        alloc->SetPrivateData(pPrivateData);
+
+        *ppAllocation = alloc;
+
+        committedAllocParams.m_List->Register(alloc);
+
+        const UINT memSegmentGroup = HeapPropertiesToMemorySegmentGroup(committedAllocParams.m_HeapProperties);
+        m_Budget.AddBlock(memSegmentGroup, resourceSize);
+        m_Budget.AddAllocation(memSegmentGroup, resourceSize);
+    }
+    else
+    {
+        res->Release();
+    }
+    return hr;
+}
+
+HRESULT AllocatorPimpl::CreateCommittedResourceWrap(
+    const CommittedAllocationParameters& committedAllocParams,
+    const CREATE_RESOURCE_PARAMS& createParams,
+    ID3D12Resource** ppResource)
+{
+    *ppResource = NULL;
+
     /* D3D12 ERROR:
      * ID3D12Device::CreateCommittedResource:
      * When creating a committed resource, D3D12_HEAP_FLAGS must not have either
@@ -7557,8 +7602,9 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
      * These flags will be set automatically to correspond with the committed resource type.
      *
      * [ STATE_CREATION ERROR #640: CREATERESOURCEANDHEAP_INVALIDHEAPMISCFLAGS]
-    */
+     */
 
+    HRESULT hr;
 #ifdef __ID3D12Device10_INTERFACE_DEFINED__
     if (createParams.Variant == CREATE_RESOURCE_PARAMS::VARIANT_WITH_LAYOUT)
     {
@@ -7575,7 +7621,7 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
                 createParams.GetResourceDesc1(), createParams.GetInitialLayout(),
                 createParams.GetOptimizedClearValue(), committedAllocParams.m_ProtectedSession,
                 createParams.GetNumCastableFormats(), const_cast<DXGI_FORMAT*>(createParams.GetCastableFormats()),
-                D3D12MA_IID_PPV_ARGS(&res));
+                D3D12MA_IID_PPV_ARGS(ppResource));
     } else
 #endif
 #ifdef __ID3D12Device8_INTERFACE_DEFINED__
@@ -7590,7 +7636,7 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
                 committedAllocParams.m_HeapFlags & ~RESOURCE_CLASS_HEAP_FLAGS,
                 createParams.GetResourceDesc1(), createParams.GetInitialResourceState(),
                 createParams.GetOptimizedClearValue(), committedAllocParams.m_ProtectedSession,
-                D3D12MA_IID_PPV_ARGS(&res));
+                D3D12MA_IID_PPV_ARGS(ppResource));
     } else
 #endif
     if (createParams.Variant == CREATE_RESOURCE_PARAMS::VARIANT_WITH_STATE)
@@ -7603,7 +7649,7 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
                     committedAllocParams.m_HeapFlags & ~RESOURCE_CLASS_HEAP_FLAGS,
                     createParams.GetResourceDesc(), createParams.GetInitialResourceState(),
                     createParams.GetOptimizedClearValue(), committedAllocParams.m_ProtectedSession,
-                    D3D12MA_IID_PPV_ARGS(&res));
+                    D3D12MA_IID_PPV_ARGS(ppResource));
         }
         else
 #endif
@@ -7614,7 +7660,7 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
                     &committedAllocParams.m_HeapProperties,
                     committedAllocParams.m_HeapFlags & ~RESOURCE_CLASS_HEAP_FLAGS,
                     createParams.GetResourceDesc(), createParams.GetInitialResourceState(),
-                    createParams.GetOptimizedClearValue(), D3D12MA_IID_PPV_ARGS(&res));
+                    createParams.GetOptimizedClearValue(), D3D12MA_IID_PPV_ARGS(ppResource));
             }
             else
                 hr = E_NOINTERFACE;
@@ -7624,36 +7670,6 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
     {
         D3D12MA_ASSERT(0);
         return E_INVALIDARG;
-    }
-
-    if (SUCCEEDED(hr))
-    {
-        SetResidencyPriority(res, committedAllocParams.m_ResidencyPriority);
-
-        if (ppvResource != NULL)
-        {
-            hr = res->QueryInterface(riidResource, ppvResource);
-        }
-        if (SUCCEEDED(hr))
-        {
-            Allocation* alloc = m_AllocationObjectAllocator.Allocate(
-                this, resourceSize, createParams.GetBaseResourceDesc()->Alignment);
-            alloc->InitCommitted(committedAllocParams.m_List);
-            alloc->SetResourcePointer(res, createParams.GetBaseResourceDesc());
-            alloc->SetPrivateData(pPrivateData);
-
-            *ppAllocation = alloc;
-
-            committedAllocParams.m_List->Register(alloc);
-
-            const UINT memSegmentGroup = HeapPropertiesToMemorySegmentGroup(committedAllocParams.m_HeapProperties);
-            m_Budget.AddBlock(memSegmentGroup, resourceSize);
-            m_Budget.AddAllocation(memSegmentGroup, resourceSize);
-        }
-        else
-        {
-            res->Release();
-        }
     }
     return hr;
 }

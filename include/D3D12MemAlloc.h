@@ -2531,7 +2531,7 @@ When a new requested resource can be placed in a free space of an existing heap 
 this operation is typically much faster, as it only requires creating a new `ID3D12Resource` object
 and not allocating new memory.
 This is the main benefit of using %D3D12MA compared to the naive approach of using Direct3D 12 directly
-and creating each resource as committed with `CreateCommittedResource`, which would result in a separate allocation of an implicit heap every time.
+and creating each resource as committed using `CreateCommittedResource`, which would result in allocation of an implicit heap every time.
 
 When **a large number of small buffers** needs to be created, the overhead of creating even just separate `ID3D12Resource` objects can be significant.
 It can be avoided by creating one or few larger buffers and manually sub-allocating parts of them for specific needs.
