@@ -936,6 +936,8 @@ struct POOL_DESC
     Specify nonzero to set explicit, constant size of memory blocks used by this pool.
     Leave 0 to use default and let the library manage block sizes automatically.
     Then sizes of particular blocks may vary.
+
+    You will be able to create committed resources out of this custom pool only when you set this member to 0.
     */
     UINT64 BlockSize;
     /** \brief Minimum number of heaps (memory blocks) to be always allocated in this pool, even if they stay empty. Optional.
@@ -1082,7 +1084,7 @@ enum ALLOCATOR_FLAGS
     
     Affects both default pools and custom pools.
     To be used for debugging purposes only.
-    There is also an equivalent flag for custom pools: D3D12MA::POOL_FLAG_ALWAYS_COMMITTED.
+    You can also force this behavior for a specific custom pool using D3D12MA::POOL_FLAG_ALWAYS_COMMITTED.
     */
     ALLOCATOR_FLAG_ALWAYS_COMMITTED = 0x2,
 
@@ -1102,13 +1104,16 @@ enum ALLOCATOR_FLAGS
     */
     ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED = 0x4,
 
-    /** Optimization, allocate MSAA textures as committed resources always.
+    /** Optimization, always allocate MSAA textures as committed resources.
 
     Specify this flag to create MSAA textures with implicit heaps, as if they were created
     with flag D3D12MA::ALLOCATION_FLAG_COMMITTED. Usage of this flags enables all default pools
     to create its heaps on smaller alignment not suitable for MSAA textures.
 
     You should always use this flag unless you really need to create some MSAA textures as placed.
+
+    This flag doesn't affect custom pools. To enable this behavior on a custom pool,
+    use D3D12MA::POOL_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED.
     */
     ALLOCATOR_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED = 0x8,
     /** Disable optimization that prefers creating small buffers as committed to avoid 64 KB alignment.
@@ -1131,6 +1136,9 @@ enum ALLOCATOR_FLAGS
     By default, the feature is used whenever available.
 
     Support can be checked by D3D12MA::Allocator::IsTightAlignmentSupported() regardless of using this flag.
+
+    This flag disables the usage of the tight alignment globally, including default and custom pools.
+    You can also disable it just for a specific custom pool by using D3D12MA::POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT.
     */
     ALLOCATOR_FLAG_DONT_USE_TIGHT_ALIGNMENT = 0x20,
 };
