@@ -317,7 +317,7 @@ enum ALLOCATION_FLAGS
 
     /** %Allocation strategy that chooses always the lowest offset in available space.
     This is not the most efficient strategy but achieves highly packed data.
-    Used internally by defragmentation, not recomended in typical usage.
+    Used internally by defragmentation, not recommended in typical usage.
     */
     ALLOCATION_FLAG_STRATEGY_MIN_OFFSET = 0x0004000,
 
