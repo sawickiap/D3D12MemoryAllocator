@@ -1762,6 +1762,63 @@ static void TestAliasingMemory(const TestContext& ctx)
     // You can use res1 and res2, but not at the same time!
 }
 
+static void TestAllocateMemorySmallAlignment(const TestContext& ctx)
+{
+    wprintf(L"Test raw memory small alignment\n");
+
+    struct TestCase
+    {
+        UINT64 AllocationAlignment;
+        D3D12_HEAP_FLAGS HeapFlags;
+        UINT64 ExpectedHeapAlignment;
+    };
+    const TestCase testCases[] =
+    {
+        { D3D12_SMALL_RESOURCE_PLACEMENT_ALIGNMENT,
+            D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES,
+            D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT },
+        { D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT,
+            D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS,
+            D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT },
+    };
+
+    for (const auto& testCase : testCases)
+    {
+        for (UINT customPoolIndex = 0; customPoolIndex < 2; ++customPoolIndex)
+        {
+            ComPtr<D3D12MA::Pool> pool;
+            D3D12MA::CALLOCATION_DESC allocDesc = D3D12MA::CALLOCATION_DESC{
+                D3D12_HEAP_TYPE_DEFAULT, D3D12MA::ALLOCATION_FLAG_COMMITTED,
+                nullptr, testCase.HeapFlags };
+            if (customPoolIndex != 0)
+            {
+                D3D12MA::CPOOL_DESC poolDesc = D3D12MA::CPOOL_DESC{
+                    D3D12_HEAP_TYPE_DEFAULT, testCase.HeapFlags, D3D12MA::POOL_FLAG_NONE };
+                CHECK_HR(ctx.allocator->CreatePool(&poolDesc, &pool));
+                allocDesc = D3D12MA::CALLOCATION_DESC{ pool.Get(), D3D12MA::ALLOCATION_FLAG_COMMITTED };
+            }
+
+            D3D12_RESOURCE_ALLOCATION_INFO allocInfo = {};
+            // Keep the size at 64 KB to isolate resource alignment from heap size requirements.
+            allocInfo.SizeInBytes = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+            allocInfo.Alignment = testCase.AllocationAlignment;
+
+            // Force a standalone heap so the result doesn't depend on available pool blocks.
+            ComPtr<D3D12MA::Allocation> alloc;
+            const HRESULT hr = ctx.allocator->AllocateMemory(&allocDesc, &allocInfo, &alloc);
+            wprintf(L"    %s pool, allocation alignment=%llu: AllocateMemory returned 0x%08X\n",
+                customPoolIndex != 0 ? L"Custom" : L"Default", allocInfo.Alignment, (UINT)hr);
+            // Regression: resource alignment must not be passed directly to CreateHeap.
+            CHECK_HR(hr);
+            CHECK_BOOL(alloc != nullptr && alloc->GetHeap() != nullptr);
+            CHECK_BOOL(alloc->GetOffset() == 0);
+            CHECK_BOOL(alloc->GetSize() == allocInfo.SizeInBytes);
+            CHECK_BOOL(alloc->GetAlignment() == allocInfo.Alignment);
+            CHECK_BOOL(alloc->GetHeap()->GetDesc().Alignment == testCase.ExpectedHeapAlignment);
+        }
+    }
+}
+
 static void TestAliasingImplicitCommitted(const TestContext& ctx)
 {
     wprintf(L"Test aliasing implicit dedicated\n");
@@ -4901,6 +4958,7 @@ static void TestGroupBasics(const TestContext& ctx)
     TestCustomHeaps(ctx);
     TestStandardCustomCommittedPlaced(ctx);
     TestAliasingMemory(ctx);
+    TestAllocateMemorySmallAlignment(ctx);
     TestAliasingImplicitCommitted(ctx);
     TestMsaa64KBAlignedTextureSupported_DefaultPool(ctx);
     TestMsaa64KBAlignedTextureSupported_CustomPool(ctx);

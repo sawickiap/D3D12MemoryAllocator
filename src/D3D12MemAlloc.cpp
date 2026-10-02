@@ -7693,7 +7693,8 @@ HRESULT AllocatorPimpl::AllocateHeap(
     D3D12_HEAP_DESC heapDesc = {};
     heapDesc.SizeInBytes = allocInfo.SizeInBytes;
     heapDesc.Properties = committedAllocParams.m_HeapProperties;
-    heapDesc.Alignment = allocInfo.Alignment;
+    // Resource placement alignment may be smaller than the required heap alignment.
+    heapDesc.Alignment = HeapFlagsToAlignment(committedAllocParams.m_HeapFlags, false);
     heapDesc.Flags = committedAllocParams.m_HeapFlags;
 
     HRESULT hr;

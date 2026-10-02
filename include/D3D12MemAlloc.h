@@ -1328,7 +1328,11 @@ public:
     Additional flags in `heapFlags` are allowed as well.
 
     `pAllocInfo->SizeInBytes` must be multiply of 64KB.
-    `pAllocInfo->Alignment` must be one of the legal values as described in documentation of `D3D12_HEAP_DESC`.
+    `pAllocInfo->Alignment` must be a non-zero power of two specifying the required alignment
+    of the allocation's offset within the heap. Smaller resource alignments are accepted,
+    such as 4 KB for small textures or 256 B for tight-alignment buffers.
+    When a separate heap is created, its alignment is calculated independently:
+    64 KB for buffer-only heaps or 4 MB when textures are permitted.
 
     If you use D3D12MA::ALLOCATION_FLAG_COMMITTED you will get a separate memory block -
     a heap that always has offset 0.

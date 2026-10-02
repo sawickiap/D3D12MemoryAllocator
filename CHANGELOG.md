@@ -1,5 +1,6 @@
 # 3.2.1 (TBD)
 
+- Improved `AllocateMemory` implementation, now allowing smaller alignment to be specified, while the heap alignment (if one is needed) is calculated correctly (#98).
 - Other fixes and improvements.
 
 # 3.2.0 (2026-06-05)
