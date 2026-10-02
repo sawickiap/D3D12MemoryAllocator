@@ -1327,7 +1327,10 @@ public:
     may be `D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES` = 0.
     Additional flags in `heapFlags` are allowed as well.
 
-    `pAllocInfo->SizeInBytes` must be multiply of 64KB.
+    `pAllocInfo->SizeInBytes` must cover the resources to be placed within the allocation, including any padding
+    required between them. Use `ID3D12Device::GetResourceAllocationInfo` to determine their
+    required sizes and alignments. Allocation sizes smaller than 64 KB are accepted.
+
     `pAllocInfo->Alignment` must be a non-zero power of two specifying the required alignment
     of the allocation's offset within the heap. Smaller resource alignments are accepted,
     such as 4 KB for small textures or 256 B for tight-alignment buffers.

@@ -1764,7 +1764,7 @@ static void TestAliasingMemory(const TestContext& ctx)
 
 static void TestAllocateMemorySmallAlignment(const TestContext& ctx)
 {
-    wprintf(L"Test raw memory small alignment\n");
+    wprintf(L"Test raw memory small alignment and size\n");
 
     struct TestCase
     {
@@ -1798,23 +1798,34 @@ static void TestAllocateMemorySmallAlignment(const TestContext& ctx)
                 allocDesc = D3D12MA::CALLOCATION_DESC{ pool.Get(), D3D12MA::ALLOCATION_FLAG_COMMITTED };
             }
 
-            D3D12_RESOURCE_ALLOCATION_INFO allocInfo = {};
-            // Keep the size at 64 KB to isolate resource alignment from heap size requirements.
-            allocInfo.SizeInBytes = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
-            allocInfo.Alignment = testCase.AllocationAlignment;
+            // Preserve the 64 KB case and also test 4 KB textures and 256 B buffers.
+            const UINT64 allocationSizes[] =
+            {
+                D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT,
+                testCase.AllocationAlignment,
+            };
+            for (UINT64 allocationSize : allocationSizes)
+            {
+                D3D12_RESOURCE_ALLOCATION_INFO allocInfo = {};
+                allocInfo.SizeInBytes = allocationSize;
+                allocInfo.Alignment = testCase.AllocationAlignment;
 
-            // Force a standalone heap so the result doesn't depend on available pool blocks.
-            ComPtr<D3D12MA::Allocation> alloc;
-            const HRESULT hr = ctx.allocator->AllocateMemory(&allocDesc, &allocInfo, &alloc);
-            wprintf(L"    %s pool, allocation alignment=%llu: AllocateMemory returned 0x%08X\n",
-                customPoolIndex != 0 ? L"Custom" : L"Default", allocInfo.Alignment, (UINT)hr);
-            // Regression: resource alignment must not be passed directly to CreateHeap.
-            CHECK_HR(hr);
-            CHECK_BOOL(alloc != nullptr && alloc->GetHeap() != nullptr);
-            CHECK_BOOL(alloc->GetOffset() == 0);
-            CHECK_BOOL(alloc->GetSize() == allocInfo.SizeInBytes);
-            CHECK_BOOL(alloc->GetAlignment() == allocInfo.Alignment);
-            CHECK_BOOL(alloc->GetHeap()->GetDesc().Alignment == testCase.ExpectedHeapAlignment);
+                // Force a standalone heap so the result doesn't depend on available pool blocks.
+                ComPtr<D3D12MA::Allocation> alloc;
+                const HRESULT hr = ctx.allocator->AllocateMemory(&allocDesc, &allocInfo, &alloc);
+                wprintf(L"    %s pool, allocation size=%llu alignment=%llu: AllocateMemory returned 0x%08X\n",
+                    customPoolIndex != 0 ? L"Custom" : L"Default",
+                    allocInfo.SizeInBytes, allocInfo.Alignment, (UINT)hr);
+                // Regression: resource alignment must not be passed directly to CreateHeap.
+                CHECK_HR(hr);
+                CHECK_BOOL(alloc != nullptr && alloc->GetHeap() != nullptr);
+                CHECK_BOOL(alloc->GetOffset() == 0);
+                CHECK_BOOL(alloc->GetSize() == allocInfo.SizeInBytes);
+                CHECK_BOOL(alloc->GetAlignment() == allocInfo.Alignment);
+                const D3D12_HEAP_DESC heapDesc = alloc->GetHeap()->GetDesc();
+                CHECK_BOOL(heapDesc.Alignment == testCase.ExpectedHeapAlignment);
+                CHECK_BOOL(heapDesc.SizeInBytes >= allocInfo.SizeInBytes);
+            }
         }
     }
 }
