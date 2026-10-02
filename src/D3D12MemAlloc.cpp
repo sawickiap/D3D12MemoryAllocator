@@ -7523,7 +7523,8 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
     {
         D3D12_RESOURCE_ALLOCATION_INFO heapAllocInfo = {};
         heapAllocInfo.SizeInBytes = resourceSize;
-        heapAllocInfo.Alignment = HeapFlagsToAlignment(committedAllocParams.m_HeapFlags, m_MsaaAlwaysCommitted);
+        // Aliasing uses an explicit heap even for MSAA resources normally created as committed.
+        heapAllocInfo.Alignment = HeapFlagsToAlignment(committedAllocParams.m_HeapFlags, false);
         hr = AllocateHeap(committedAllocParams, heapAllocInfo, withinBudget, pPrivateData, ppAllocation);
         if (SUCCEEDED(hr))
         {

@@ -1,3 +1,7 @@
+# 3.2.1 (TBD)
+
+- Other fixes and improvements.
+
 # 3.2.0 (2026-06-05)
 
 - Added `POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT` (#91).
