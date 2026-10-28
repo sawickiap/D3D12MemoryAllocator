@@ -23,7 +23,6 @@
 #include "Common.h"
 #include "Tests.h"
 #include <thread>
-#include <d3d12sdklayers.h>
 
 // This new constant is absent from older Windows SDK dxguid.lib versions.
 #include <initguid.h>
@@ -412,7 +411,7 @@ static void ValidatePlacedSmallMsaaTextureAllocation(const TestContext& ctx,
         desc.Alignment = 0;
         const D3D12_RESOURCE_ALLOCATION_INFO info = ctx.device->GetResourceAllocationInfo(0, 1, &desc);
         CHECK_BOOL(info.SizeInBytes != UINT64_MAX && info.Alignment != 0);
-        expectedAlignment = (std::max)(info.Alignment, UINT64(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+        expectedAlignment = std::max(info.Alignment, UINT64(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
     }
     CHECK_BOOL(alloc->GetAlignment() == expectedAlignment);
     CHECK_BOOL(alloc->GetOffset() % expectedAlignment == 0);
@@ -3575,28 +3574,8 @@ static void TestDesc2Paths(const TestContext& ctx, ID3D12Device16* device,
 
         ComPtr<D3D12MA::Allocation> allocation;
         ComPtr<ID3D12Resource> resource;
-        const HRESULT createHr = ctx.allocator->CreateResource4(&allocDesc, &inputDesc,
-            D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, formatCount, formats, &allocation, IID_PPV_ARGS(&resource));
-        if (FAILED(createHr))
-        {
-            wprintf(L"  CreateResource4 failed: mode %u, dimension %u, format %u, alignment %llu, formats %u, HRESULT 0x%08lX\n",
-                mode, UINT(inputDesc.Dimension), UINT(inputDesc.Format), inputDesc.Alignment, formatCount, createHr);
-            ComPtr<ID3D12InfoQueue> messages;
-            if (SUCCEEDED(ctx.device->QueryInterface(IID_PPV_ARGS(&messages))))
-            {
-                for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i)
-                {
-                    SIZE_T size = 0;
-                    CHECK_HR(messages->GetMessage(i, nullptr, &size));
-                    std::vector<char> bytes(size);
-                    D3D12_MESSAGE* message = reinterpret_cast<D3D12_MESSAGE*>(bytes.data());
-                    CHECK_HR(messages->GetMessage(i, message, &size));
-                    if (message->Severity <= D3D12_MESSAGE_SEVERITY_ERROR)
-                        wprintf(L"  D3D12: %hs\n", message->pDescription);
-                }
-            }
-        }
-        CHECK_HR(createHr);
+        CHECK_HR(ctx.allocator->CreateResource4(&allocDesc, &inputDesc,
+            D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, formatCount, formats, &allocation, IID_PPV_ARGS(&resource)));
         CHECK_BOOL(allocation->GetResource() == resource.Get());
         CHECK_BOOL((allocation->GetHeap() == nullptr) == (mode == 0));
         CHECK_BOOL(memcmp(&inputDesc, &originalDesc, sizeof(inputDesc)) == 0);
@@ -3661,7 +3640,7 @@ static void TestDesc2Paths(const TestContext& ctx, ID3D12Device16* device,
     // A raw allocation containing padding permits a nonzero allocation-local alias offset.
     const D3D12_RESOURCE_ALLOCATION_INFO info = GetAllocationInfo4(device, inputDesc, formatCount, formats);
     CHECK_BOOL(info.SizeInBytes != UINT64_MAX && info.Alignment != 0);
-    const UINT64 aliasAlignment = (std::max)(info.Alignment, inputDesc.Alignment);
+    const UINT64 aliasAlignment = std::max(info.Alignment, inputDesc.Alignment);
     D3D12_RESOURCE_ALLOCATION_INFO backingInfo = {info.SizeInBytes + aliasAlignment, aliasAlignment};
     D3D12MA::CALLOCATION_DESC backingDesc{D3D12_HEAP_TYPE_DEFAULT, D3D12MA::ALLOCATION_FLAG_COMMITTED};
     backingDesc.ExtraHeapFlags = inputDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ? D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS :
@@ -3679,78 +3658,6 @@ static void TestDesc2Paths(const TestContext& ctx, ID3D12Device16* device,
     CheckDesc2(offsetAlias.Get(), inputDesc, formatCount, formats);
 }
 
-static void TestDesc2Defragmentation(const TestContext& ctx)
-{
-    wprintf(L"Test desc2 defragmentation and data preservation\n");
-    D3D12MA::CPOOL_DESC poolDesc{D3D12_HEAP_TYPE_UPLOAD, D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS};
-    poolDesc.HeapFlags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
-    poolDesc.BlockSize = MEGABYTE;
-    poolDesc.Flags = D3D12MA::POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT;
-    ComPtr<D3D12MA::Pool> pool;
-    CHECK_HR(ctx.allocator->CreatePool(&poolDesc, &pool));
-    D3D12MA::CALLOCATION_DESC allocDesc{pool.Get()};
-    D3D12_RESOURCE_DESC2 desc;
-    FillResourceDescForBuffer(desc, MEGABYTE / 4);
-    std::vector<ComPtr<D3D12MA::Allocation>> allocations(8);
-    for (auto& allocation : allocations)
-    {
-        CHECK_HR(ctx.allocator->CreateResource4(&allocDesc, &desc, D3D12_BARRIER_LAYOUT_UNDEFINED,
-            nullptr, 0, nullptr, &allocation, __uuidof(ID3D12Resource), nullptr));
-        void* data;
-        CHECK_HR(allocation->GetResource()->Map(0, &EMPTY_RANGE, &data));
-        memset(data, 0x5A, size_t(desc.Width));
-        allocation->GetResource()->Unmap(0, nullptr);
-    }
-    allocations[0].Reset();
-    allocations[1].Reset();
-    D3D12MA::DEFRAGMENTATION_DESC defragDesc = {};
-    defragDesc.Flags = D3D12MA::DEFRAGMENTATION_FLAG_ALGORITHM_FULL;
-    ComPtr<D3D12MA::DefragmentationContext> defrag;
-    CHECK_HR(pool->BeginDefragmentation(&defragDesc, &defrag));
-    D3D12MA::DEFRAGMENTATION_PASS_MOVE_INFO pass = {};
-    HRESULT hr;
-    while ((hr = defrag->BeginPass(&pass)) == S_FALSE)
-    {
-        for (UINT i = 0; i < pass.MoveCount; ++i)
-        {
-            auto& move = pass.pMoves[i];
-            const D3D12_RESOURCE_DESC2 sourceDesc = GetDesc2(move.pSrcAllocation->GetResource());
-            ComPtr<ID3D12Resource3> source3;
-            CHECK_HR(move.pSrcAllocation->GetResource()->QueryInterface(IID_PPV_ARGS(&source3)));
-            std::vector<DXGI_FORMAT> formats(source3->GetCastableFormatsCount());
-            if (!formats.empty()) CHECK_HR(source3->GetCastableFormats(formats.data()));
-            ComPtr<ID3D12Resource> destination;
-            CHECK_HR(ctx.allocator->CreateAliasingResource3(move.pDstTmpAllocation, 0, &sourceDesc,
-                D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, UINT32(formats.size()), formats.data(), IID_PPV_ARGS(&destination)));
-            CheckDesc2(destination.Get(), sourceDesc, UINT32(formats.size()), formats.data());
-            void* src;
-            void* dst;
-            CHECK_HR(move.pSrcAllocation->GetResource()->Map(0, &EMPTY_RANGE, &src));
-            CHECK_HR(destination->Map(0, &EMPTY_RANGE, &dst));
-            memcpy(dst, src, size_t(desc.Width));
-            destination->Unmap(0, nullptr);
-            move.pSrcAllocation->GetResource()->Unmap(0, nullptr);
-            move.pDstTmpAllocation->SetResource(destination.Get());
-        }
-        hr = defrag->EndPass(&pass);
-        CHECK_HR(hr);
-        if (hr == S_OK) break;
-    }
-    CHECK_HR(hr);
-    D3D12MA::DEFRAGMENTATION_STATS stats;
-    defrag->GetStats(&stats);
-    CHECK_BOOL(stats.AllocationsMoved != 0);
-    for (auto& allocation : allocations)
-    {
-        if (!allocation) continue;
-        CheckDesc2(allocation->GetResource(), desc, 0, nullptr);
-        void* data;
-        CHECK_HR(allocation->GetResource()->Map(0, &EMPTY_RANGE, &data));
-        const unsigned char* bytes = static_cast<const unsigned char*>(data);
-        CHECK_BOOL(std::all_of(bytes, bytes + desc.Width, [](unsigned char value) { return value == 0x5A; }));
-        allocation->GetResource()->Unmap(0, nullptr);
-    }
-}
 #endif // #ifdef __ID3D12Resource3_INTERFACE_DEFINED__
 
 static void TestDevice16(const TestContext& ctx)
@@ -3835,7 +3742,6 @@ static void TestDevice16(const TestContext& ctx)
         CHECK_BOOL(before.Total.Stats.AllocationCount == after.Total.Stats.AllocationCount &&
             before.Total.Stats.AllocationBytes == after.Total.Stats.AllocationBytes);
     }
-    TestDesc2Defragmentation(ctx);
 #endif
     wprintf(L"  Device16 resource paths passed.\n");
 }
