@@ -201,7 +201,6 @@ struct CommandLineParameters
     bool m_Help = false;
     bool m_List = false;
     bool m_Test = false;
-    bool m_TestAgility = false;
     std::wstring m_WarpDll;
     GPUSelection m_GPUSelection;
 
@@ -230,10 +229,6 @@ struct CommandLineParameters
             else if (_wcsicmp(argv[i], L"-t") == 0 || _wcsicmp(argv[i], L"--Test") == 0)
             {
                 m_Test = true;
-            }
-            else if (_wcsicmp(argv[i], L"--TestAgility") == 0)
-            {
-                m_TestAgility = true;
             }
             else if (_wcsicmp(argv[i], L"--WARP") == 0)
             {
@@ -1649,14 +1644,11 @@ static void ExecuteTests()
         ctx.device = g_Device.Get();
         ctx.allocator = g_Allocator.Get();
         ctx.allocatorFlags = g_AllocatorFlags;
-        if (g_CommandLineParameters.m_TestAgility)
-            TestAgility(ctx);
-        else
-            Test(ctx);
+        Test(ctx);
     }
     catch(const std::exception& ex)
     {
-        if (g_CommandLineParameters.m_Test || g_CommandLineParameters.m_TestAgility)
+        if (g_CommandLineParameters.m_Test)
             throw;
         wprintf(L"ERROR: %hs\n", ex.what());
     }
@@ -1753,7 +1745,6 @@ static void PrintHelp()
         L"-g S, --GPU S   Select GPU with name containing S\n"
         L"-i N, --GPUIndex N   Select GPU index N\n"
         L"-t, --Test   Run tests and exit\n"
-        L"--TestAgility   Run Agility SDK compatibility tests and exit\n"
         L"--WARP   Select the WARP software adapter\n"
         L"--WARPDll PATH   Load a specific WARP DLL before selecting its adapter\n"
     );
@@ -1797,7 +1788,7 @@ int MainWindow()
     g_TimeOffset = GetTickCount64();
     
     // Execute tests and close program
-    if (g_CommandLineParameters.m_Test || g_CommandLineParameters.m_TestAgility)
+    if (g_CommandLineParameters.m_Test)
     {
         ExecuteTests();
         PostMessage(g_Wnd, WM_CLOSE, 0, 0);

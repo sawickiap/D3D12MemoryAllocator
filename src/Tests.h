@@ -33,4 +33,3 @@ struct TestContext
 };
 
 void Test(const TestContext& ctx);
-void TestAgility(const TestContext& ctx);

@@ -3954,23 +3954,6 @@ static void TestExecuteTileMappingsHeap(const TestContext& ctx)
 }
 #endif
 
-void TestAgility(const TestContext& ctx)
-{
-    wprintf(L"AGILITY TESTS BEGIN\n");
-#ifdef __ID3D12Device16_INTERFACE_DEFINED__
-    TestDevice16(ctx);
-#ifdef __ID3D12Resource3_INTERFACE_DEFINED__
-    TestGuidTextureLayout(ctx);
-#endif
-#else
-    wprintf(L"  SKIP desc2: headers do not declare Device16.\n");
-#endif
-#if defined(DIRECT3D_EXECUTE_TILE_MAPPINGS) && DIRECT3D_EXECUTE_TILE_MAPPINGS
-    TestExecuteTileMappingsHeap(ctx);
-#endif
-    wprintf(L"AGILITY TESTS END\n");
-}
-
 static void TestGPUUploadHeap(const TestContext& ctx)
 {
 #if D3D12_SDK_VERSION >= 610
@@ -5482,7 +5465,15 @@ static void TestGroupBasics(const TestContext& ctx)
     TestDevice12(ctx);
 #endif
 
-    TestAgility(ctx);
+#ifdef __ID3D12Device16_INTERFACE_DEFINED__
+    TestDevice16(ctx);
+#ifdef __ID3D12Resource3_INTERFACE_DEFINED__
+    TestGuidTextureLayout(ctx);
+#endif
+#endif
+#if defined(DIRECT3D_EXECUTE_TILE_MAPPINGS) && DIRECT3D_EXECUTE_TILE_MAPPINGS
+    TestExecuteTileMappingsHeap(ctx);
+#endif
     TestGPUUploadHeap(ctx);
     TestTightAlignment(ctx);
 
