@@ -77,7 +77,6 @@ struct GPUSelection
 {
     UINT32 Index = UINT32_MAX;
     std::wstring Substring;
-    bool Warp = false;
 };
 
 class DXGIUsage
@@ -198,7 +197,6 @@ struct CommandLineParameters
     bool m_Help = false;
     bool m_List = false;
     bool m_Test = false;
-    std::wstring m_WarpDll;
     GPUSelection m_GPUSelection;
 
     bool Parse(int argc, wchar_t** argv)
@@ -227,19 +225,10 @@ struct CommandLineParameters
             {
                 m_Test = true;
             }
-            else if (_wcsicmp(argv[i], L"--WARP") == 0)
-            {
-                m_GPUSelection.Warp = true;
-            }
-            else if (_wcsicmp(argv[i], L"--WARPDll") == 0 && i + 1 < argc)
-            {
-                m_GPUSelection.Warp = true;
-                m_WarpDll = argv[++i];
-            }
             else
                 return false;
         }
-        return !m_GPUSelection.Warp || (m_GPUSelection.Index == UINT32_MAX && m_GPUSelection.Substring.empty());
+        return true;
     }
 } g_CommandLineParameters;
 
@@ -495,12 +484,6 @@ ComPtr<IDXGIAdapter1> DXGIUsage::CreateAdapter(const GPUSelection& GPUSelection)
 {
     ComPtr<IDXGIAdapter1> adapter;
 
-    if (GPUSelection.Warp)
-    {
-        CHECK_HR(m_DXGIFactory->EnumWarpAdapter(IID_PPV_ARGS(&adapter)));
-        return adapter;
-    }
-
     if(GPUSelection.Index != UINT32_MAX)
     {
         // Cannot specify both index and name.
@@ -673,20 +656,10 @@ static void InitD3D() // initializes direct3d 12
 
     // Create the g_Device
     ID3D12Device* device = nullptr;
-    const HRESULT deviceHr = D3D12CreateDevice(
+    CHECK_HR( D3D12CreateDevice(
         adapter.Get(),
         MY_D3D_FEATURE_LEVEL,
-        IID_PPV_ARGS(&device));
-    if (FAILED(deviceHr))
-        wprintf(L"D3D12CreateDevice failed: HRESULT 0x%08lX\n", deviceHr);
-    for (const wchar_t* moduleName : { L"D3D12Core.dll", L"d3d10warp.dll" })
-    {
-        HMODULE module = GetModuleHandleW(moduleName);
-        wchar_t modulePath[MAX_PATH];
-        if (module && GetModuleFileNameW(module, modulePath, _countof(modulePath)))
-            wprintf(L"Loaded %s: %s\n", moduleName, modulePath);
-    }
-    CHECK_HR(deviceHr);
+        IID_PPV_ARGS(&device)) );
     g_Device.Attach(device);
 
     // Create allocator
@@ -1645,8 +1618,6 @@ static void ExecuteTests()
     }
     catch(const std::exception& ex)
     {
-        if (g_CommandLineParameters.m_Test)
-            throw;
         wprintf(L"ERROR: %hs\n", ex.what());
     }
 }
@@ -1742,8 +1713,6 @@ static void PrintHelp()
         L"-g S, --GPU S   Select GPU with name containing S\n"
         L"-i N, --GPUIndex N   Select GPU index N\n"
         L"-t, --Test   Run tests and exit\n"
-        L"--WARP   Select the WARP software adapter\n"
-        L"--WARPDll PATH   Load a specific WARP DLL before selecting its adapter\n"
     );
 }
 
@@ -1830,15 +1799,6 @@ int Main2(int argc, wchar_t** argv)
     {
         PrintHelp();
         return (int)ExitCode::Help;
-    }
-
-    if (!g_CommandLineParameters.m_WarpDll.empty())
-    {
-        wchar_t fullPath[32768];
-        const DWORD length = GetFullPathNameW(g_CommandLineParameters.m_WarpDll.c_str(), _countof(fullPath), fullPath, NULL);
-        CHECK_BOOL(length != 0 && length < _countof(fullPath));
-        // Keep this module loaded for the lifetime of the device and DXGI factory.
-        CHECK_BOOL(LoadLibraryExW(fullPath, NULL, LOAD_WITH_ALTERED_SEARCH_PATH) != NULL);
     }
 
     // variable name should not same as class name

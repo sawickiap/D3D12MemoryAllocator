@@ -6806,9 +6806,10 @@ HRESULT AllocatorPimpl::CreateResource(
     if (FAILED(hr))
         return hr;
 
-    if (resAllocInfo.SizeInBytes == 0 || resAllocInfo.SizeInBytes == UINT64_MAX ||
-        resAllocInfo.Alignment == 0 || !IsPow2(resAllocInfo.Alignment))
-        return E_INVALIDARG;
+    D3D12MA_ASSERT(IsPow2(resAllocInfo.Alignment));
+    // We've seen UINT64_MAX returned when the call to GetResourceAllocationInfo was invalid.
+    D3D12MA_ASSERT(resAllocInfo.SizeInBytes != UINT64_MAX);
+    D3D12MA_ASSERT(resAllocInfo.SizeInBytes > 0);
 
     BlockVector* blockVector = NULL;
     CommittedAllocationParameters committedAllocationParams = {};
@@ -6986,9 +6987,8 @@ HRESULT AllocatorPimpl::CreateAliasingResource(
     if (FAILED(hr))
         return hr;
 
-    if (resAllocInfo.SizeInBytes == 0 || resAllocInfo.SizeInBytes == UINT64_MAX ||
-        resAllocInfo.Alignment == 0 || !IsPow2(resAllocInfo.Alignment))
-        return E_INVALIDARG;
+    D3D12MA_ASSERT(IsPow2(resAllocInfo.Alignment));
+    D3D12MA_ASSERT(resAllocInfo.SizeInBytes > 0);
 
     ID3D12Heap* const existingHeap = pAllocation->GetHeap();
     const UINT64 existingOffset = pAllocation->GetOffset();

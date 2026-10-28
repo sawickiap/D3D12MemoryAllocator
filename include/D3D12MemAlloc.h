@@ -1315,12 +1315,12 @@ public:
 #endif  // #ifdef __ID3D12Device10_INTERFACE_DEFINED__
 
 #ifdef __ID3D12Device16_INTERFACE_DEFINED__
-    /** \brief Similar to CreateResource3, but accepts `D3D12_RESOURCE_DESC2`, including a texture layout GUID.
+    /** \brief Similar to Allocator::CreateResource3, but accepts `D3D12_RESOURCE_DESC2`, including a texture layout GUID.
 
     Uses `ID3D12Device16::GetResourceAllocationInfo4`, `CreateCommittedResource4`, or `CreatePlacedResource3`.
     Returns `E_NOINTERFACE` if the device does not expose `ID3D12Device16`; older APIs remain usable.
     The descriptor and castable formats are preserved throughout sizing and creation. `NumCastableFormats`
-    must be zero when `pCastableFormats` is null. `ppvResource` is optional, as in CreateResource.
+    must be zero when `pCastableFormats` is null. `ppvResource` is optional, as in Allocator::CreateResource.
     Buffers must use `D3D12_BARRIER_LAYOUT_UNDEFINED` as their initial layout.
 
     For ordinary layouts, zero-initialize `LayoutGuid`. For `D3D12_TEXTURE_LAYOUT_GUID`, supply a supported
@@ -1440,12 +1440,12 @@ public:
 #endif  // #ifdef __ID3D12Device10_INTERFACE_DEFINED__
 
 #ifdef __ID3D12Device16_INTERFACE_DEFINED__
-    /** \brief Similar to CreateAliasingResource2, but accepts the complete `D3D12_RESOURCE_DESC2`.
+    /** \brief Similar to Allocator::CreateAliasingResource2, but accepts the complete `D3D12_RESOURCE_DESC2`.
 
     Uses `ID3D12Device16::GetResourceAllocationInfo4` and `CreatePlacedResource3`.
-    Returns `E_NOINTERFACE` if `ID3D12Device16` is unavailable. See CreateResource4 for GUID-layout requirements.
+    Returns `E_NOINTERFACE` if `ID3D12Device16` is unavailable. See Allocator::CreateResource4 for GUID-layout requirements.
     The offset is local to the allocation and must satisfy the resource's placement alignment and bounds.
-    Does not change the resource owned by pAllocation. The returned resource is owned by the caller.
+    Does not change the resource owned by `pAllocation`. The returned resource is owned by the caller.
     */
     HRESULT CreateAliasingResource3(Allocation* pAllocation,
         UINT64 AllocationLocalOffset,
@@ -2968,10 +2968,6 @@ Typically, you don't need to do any of those.
 The library automatically aligns all buffers to at least 256 B, even when the system supports smaller alignment.
 This is the alignment required for constant buffers, expressed by `D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT` constant.
 You can override this logic for \subpage custom_pools with a specific D3D12MA::POOL_DESC::MinAllocationAlignment.
-When a resource has a stricter usage-specific GPU address alignment, supply a suitable descriptor alignment floor
-or pool minimum. This includes raytracing acceleration structures, templates, and scratch buffers, including preview
-Raytracing2 operations. The application must obtain result/scratch sizes from the operation's prebuild query;
-the allocator cannot infer them from a feature tier.
 
 \page defragmentation Defragmentation
 
@@ -3100,13 +3096,6 @@ Allocations are never moved between different heap types.
 The size of the destination memory reserved for a moved allocation is the same as the original one.
 Alignment of an allocation as it was determined using `GetResourceAllocationInfo()` is also respected after defragmentation.
 Buffers/textures should be recreated with the same `D3D12_RESOURCE_DESC` parameters as the original ones.
-Preserve the complete descriptor family and creation parameters: for resources created with CreateResource4,
-use the original `D3D12_RESOURCE_DESC2` and castable-format list, or query `ID3D12Resource3::GetDesc2`,
-`GetCastableFormatsCount`, and `GetCastableFormats` when that interface is available.
-`GetDesc` and `GetDesc1` discard the layout GUID. Clear values, protected-session policy, and current
-state/layout may require application-maintained metadata. CreateAliasingResource3 can recreate the resource
-in the temporary destination allocation. Only move GUID-layout resources when the chosen copy method and
-synchronization are valid for that layout; otherwise ignore the move or keep such resources in a separate pool.
 
 You can perform the defragmentation incrementally to limit the number of allocations and bytes to be moved
 in each pass, e.g. to call it in sync with render frames and not to experience too big hitches.

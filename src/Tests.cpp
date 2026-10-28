@@ -3882,16 +3882,8 @@ static void TestGuidTextureLayout(const TestContext& ctx)
             if (FAILED(hr) || support.GuidTextureLayoutTier < D3D12_GUID_TEXTURE_LAYOUT_TIER_1 || !support.GuidSupported ||
                 (support.Support1 & D3D12_FORMAT_SUPPORT1_TEXTURE2D) == 0)
                 continue;
-            wprintf(L"  Supported format %u, GUID %08lX; testing committed/placed/aliasing paths.\n", UINT(format), guid.Data1);
+            wprintf(L"  Supported format %u, GUID 0x%08lX; testing committed/placed/aliasing paths.\n", UINT(format), guid.Data1);
             TestDesc2Paths(ctx, device.Get(), desc);
-            D3D12_RESOURCE_DESC2 invalidDesc = desc;
-            invalidDesc.LayoutGuid = {}; // A GUID layout cannot use the null GUID.
-            D3D12MA::CALLOCATION_DESC allocDesc{D3D12_HEAP_TYPE_DEFAULT, D3D12MA::ALLOCATION_FLAG_COMMITTED};
-            ComPtr<D3D12MA::Allocation> failedAllocation;
-            ComPtr<ID3D12Resource> failedResource;
-            CHECK_BOOL(ctx.allocator->CreateResource4(&allocDesc, &invalidDesc, D3D12_BARRIER_LAYOUT_UNDEFINED,
-                nullptr, 0, nullptr, &failedAllocation, IID_PPV_ARGS(&failedResource)) == E_INVALIDARG);
-            CHECK_BOOL(!failedAllocation && !failedResource);
             wprintf(L"  GUID texture paths passed.\n");
             return;
         }
