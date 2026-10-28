@@ -1,6 +1,9 @@
-# 3.2.2 (TBD)
+# 3.3.0 (TBD)
 
+- Added support for the new Agility SDK to 1.620.1 / 1.722.0-preview.
+  - Added `Allocator::CreateResource4` and `CreateAliasingResource3` for `D3D12_RESOURCE_DESC2` and GUID texture layouts.
 - Added file `AGENTS.md` for agentic AI.
+- Other fixes and improvements.
 
 # 3.2.1 (2026-10-26)
 
