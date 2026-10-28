@@ -69,7 +69,7 @@ resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 D3D12MA::ALLOCATION_DESC allocDesc = {};
 allocDesc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
 
-D3D12Resource* resource;
+ID3D12Resource* resource;
 D3D12MA::Allocation* allocation;
 HRESULT hr = allocator->CreateResource(
     &allocDesc, &resourceDesc,

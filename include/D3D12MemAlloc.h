@@ -2292,7 +2292,7 @@ D3D12MA::Allocation* allocation;
 HRESULT hr = allocator->CreateResource(
     &allocationDesc,
     &resourceDesc,
-    D3D12_RESOURCE_STATE_GENERIC_READ,
+    D3D12_RESOURCE_STATE_COMMON,
     NULL,
     &allocation,
     IID_PPV_ARGS(&resource));
@@ -2401,7 +2401,7 @@ allocDesc.CustomPool = pool;
 D3D12_RESOURCE_DESC resDesc = ...
 Allocation* alloc;
 hr = allocator->CreateResource(&allocDesc, &resDesc,
-    D3D12_RESOURCE_STATE_GENERIC_READ, NULL, &alloc, IID_NULL, NULL);
+    D3D12_RESOURCE_STATE_COMMON, NULL, &alloc, IID_NULL, NULL);
 \endcode
 
 All allocations must be released before releasing the pool.
@@ -2444,7 +2444,7 @@ D3D12_RESOURCE_DESC resDesc = ...
 Allocation* alloc;
 ID3D12Resource* res;
 hr = allocator->CreateResource(&allocDesc, &resDesc,
-    D3D12_RESOURCE_STATE_GENERIC_READ, NULL, &alloc, IID_PPV_ARGS(&res));
+    D3D12_RESOURCE_STATE_COMMON, NULL, &alloc, IID_PPV_ARGS(&res));
 \endcode
 
 This feature may seem unnecessary, but creating committed allocations from custom pools may be useful
