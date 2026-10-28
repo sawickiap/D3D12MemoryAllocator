@@ -25,9 +25,6 @@
 #include "Tests.h"
 #include <atomic>
 #include <Shlwapi.h> // For StrStrI
-#ifdef _DEBUG
-    #include <crtdbg.h>
-#endif
 
 namespace VS
 {
@@ -1860,15 +1857,6 @@ int Main2(int argc, wchar_t** argv)
 
 int wmain(int argc, wchar_t** argv)
 {
-    setvbuf(stdout, nullptr, _IONBF, 0);
-    _set_error_mode(_OUT_TO_STDERR);
-    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
-#ifdef _DEBUG
-    // Automated test failures must reach stderr instead of waiting in an assertion dialog.
-    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-#endif
     try
     {
         return Main2(argc, argv);

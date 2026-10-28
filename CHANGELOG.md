@@ -2,7 +2,7 @@
 
 - Added `Allocator::CreateResource4` and `CreateAliasingResource3` for `D3D12_RESOURCE_DESC2` and GUID texture layouts (Agility SDK 1.620.1 / 1.722.0-preview), with compile-time guards and runtime interface checks.
 - Preserved full descriptors and castable formats in allocation queries and committed, placed, and aliasing creation. GUID layouts do not automatically use tight alignment.
-- Added desc2 and GUID-texture tests, with optional WARP selection for software-adapter validation, and documented resource recreation and preview tile-backing heaps.
+- Added desc2 and GUID-texture tests, with optional WARP selection for software-adapter validation, and documented resource recreation.
 - Fixed cleanup after dedicated aliasable resource creation fails and made aliasing bounds checks overflow-safe. Aliasing respects the backing custom pool's tight-alignment opt-out.
 - Preserved explicit desc2 alignment floors when native allocation queries return a smaller minimum, and updated the MSAA alignment tests to account for driver-provided tight alignment.
 - Added file `AGENTS.md` for agentic AI.

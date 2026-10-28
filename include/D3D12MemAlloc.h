@@ -1366,12 +1366,6 @@ public:
     If you use D3D12MA::ALLOCATION_FLAG_COMMITTED you will get a separate memory block -
     a heap that always has offset 0.
 
-    With preview headers exposing `DIRECT3D_EXECUTE_TILE_MAPPINGS`, an application can pass
-    `D3D12_HEAP_FLAG_ALLOW_EXECUTE_TILE_MAPPINGS` in ExtraHeapFlags for a dedicated allocation,
-    or in POOL_DESC::HeapFlags for a custom pool. Query the required device interface and capabilities first.
-    Use GetHeap() for caller-managed registration; registration exposes the whole heap, so pooled tile offsets
-    must respect allocation boundaries. Reserved resources, tile mappings, and synchronization remain application-owned.
-    Do not release or recycle backing memory while mapping operations or resource accesses are in flight.
     */
     HRESULT AllocateMemory(
         const ALLOCATION_DESC* pAllocDesc,

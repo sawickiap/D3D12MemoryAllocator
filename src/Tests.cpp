@@ -410,12 +410,7 @@ static void ValidatePlacedSmallMsaaTextureAllocation(const TestContext& ctx,
     {
         // Tight alignment may be smaller than the traditional small-MSAA alignment, e.g. on WARP.
         desc.Alignment = 0;
-#if defined(_MSC_VER) || !defined(_WIN32)
         const D3D12_RESOURCE_ALLOCATION_INFO info = ctx.device->GetResourceAllocationInfo(0, 1, &desc);
-#else
-        D3D12_RESOURCE_ALLOCATION_INFO info;
-        ctx.device->GetResourceAllocationInfo(&info, 0, 1, &desc);
-#endif
         CHECK_BOOL(info.SizeInBytes != UINT64_MAX && info.Alignment != 0);
         expectedAlignment = (std::max)(info.Alignment, UINT64(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
     }
@@ -3512,12 +3507,7 @@ static void TestDevice12(const TestContext& ctx)
 static D3D12_RESOURCE_ALLOCATION_INFO GetAllocationInfo4(ID3D12Device16* device,
     const D3D12_RESOURCE_DESC2& desc, UINT32 formatCount = 0, const DXGI_FORMAT* formats = nullptr)
 {
-#if defined(_MSC_VER) || !defined(_WIN32)
     return device->GetResourceAllocationInfo4(0, 1, &desc, &formatCount, &formats, nullptr);
-#else
-    D3D12_RESOURCE_ALLOCATION_INFO info;
-    return *device->GetResourceAllocationInfo4(&info, 0, 1, &desc, &formatCount, &formats, nullptr);
-#endif
 }
 
 #ifdef __ID3D12Resource3_INTERFACE_DEFINED__
@@ -3525,12 +3515,7 @@ static D3D12_RESOURCE_DESC2 GetDesc2(ID3D12Resource* resource)
 {
     ComPtr<ID3D12Resource3> resource3;
     CHECK_HR(resource->QueryInterface(IID_PPV_ARGS(&resource3)));
-#if defined(_MSC_VER) || !defined(_WIN32)
     return resource3->GetDesc2();
-#else
-    D3D12_RESOURCE_DESC2 desc;
-    return *resource3->GetDesc2(&desc);
-#endif
 }
 
 static void CheckDesc2(ID3D12Resource* resource, const D3D12_RESOURCE_DESC2& expected,
@@ -3915,44 +3900,6 @@ static void TestGuidTextureLayout(const TestContext& ctx)
 }
 #endif
 #endif // #ifdef __ID3D12Device16_INTERFACE_DEFINED__
-
-#if defined(DIRECT3D_EXECUTE_TILE_MAPPINGS) && DIRECT3D_EXECUTE_TILE_MAPPINGS
-static void TestExecuteTileMappingsHeap(const TestContext& ctx)
-{
-    wprintf(L"Test ExecuteTileMappings backing heap flags\n");
-    ComPtr<ID3D12DeviceExecuteTileMappings> tileDevice;
-    D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
-    if (FAILED(ctx.device->QueryInterface(IID_PPV_ARGS(&tileDevice))) ||
-        FAILED(ctx.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))) ||
-        options.TiledResourcesTier < D3D12_TILED_RESOURCES_TIER_5)
-    {
-        wprintf(L"  SKIP: ExecuteTileMappings interface or Tier 5 unavailable.\n");
-        return;
-    }
-    const D3D12_HEAP_FLAGS flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS | D3D12_HEAP_FLAG_ALLOW_EXECUTE_TILE_MAPPINGS;
-    D3D12_RESOURCE_ALLOCATION_INFO info = {MEGABYTE, D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT};
-    for (UINT custom = 0; custom < 2; ++custom)
-    {
-        D3D12MA::CPOOL_DESC poolDesc{D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_NONE};
-        poolDesc.HeapFlags = flags;
-        poolDesc.BlockSize = 4 * MEGABYTE;
-        ComPtr<D3D12MA::Pool> pool;
-        D3D12MA::CALLOCATION_DESC allocDesc{D3D12_HEAP_TYPE_DEFAULT, D3D12MA::ALLOCATION_FLAG_COMMITTED};
-        allocDesc.ExtraHeapFlags = flags;
-        if (custom)
-        {
-            CHECK_HR(ctx.allocator->CreatePool(&poolDesc, &pool));
-            allocDesc.CustomPool = pool.Get();
-            allocDesc.Flags = D3D12MA::ALLOCATION_FLAG_NONE;
-            allocDesc.ExtraHeapFlags = D3D12_HEAP_FLAG_NONE; // The custom pool's flags are authoritative.
-        }
-        ComPtr<D3D12MA::Allocation> allocation;
-        CHECK_HR(ctx.allocator->AllocateMemory(&allocDesc, &info, &allocation));
-        CHECK_BOOL(allocation->GetHeap() && (allocation->GetHeap()->GetDesc().Flags & flags) == flags);
-    }
-    wprintf(L"  ExecuteTileMappings heap flags passed.\n");
-}
-#endif
 
 static void TestGPUUploadHeap(const TestContext& ctx)
 {
@@ -5470,9 +5417,6 @@ static void TestGroupBasics(const TestContext& ctx)
 #ifdef __ID3D12Resource3_INTERFACE_DEFINED__
     TestGuidTextureLayout(ctx);
 #endif
-#endif
-#if defined(DIRECT3D_EXECUTE_TILE_MAPPINGS) && DIRECT3D_EXECUTE_TILE_MAPPINGS
-    TestExecuteTileMappingsHeap(ctx);
 #endif
     TestGPUUploadHeap(ctx);
     TestTightAlignment(ctx);
