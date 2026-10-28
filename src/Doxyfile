@@ -2514,8 +2514,9 @@ PREDEFINED             = __IDXGIAdapter3_INTERFACE_DEFINED__ \
                          __ID3D12Device8_INTERFACE_DEFINED__ \
                          __ID3D12Device10_INTERFACE_DEFINED__ \
                          __ID3D12Device12_INTERFACE_DEFINED__ \
-                         D3D12_PREVIEW_SDK_VERSION=716 \
-                         D3D12_SDK_VERSION=716 \
+                         __ID3D12Device16_INTERFACE_DEFINED__ \
+                         D3D12_PREVIEW_SDK_VERSION=722 \
+                         D3D12_SDK_VERSION=620 \
                          protected=private
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then this
