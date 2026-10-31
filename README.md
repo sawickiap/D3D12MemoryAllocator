@@ -10,8 +10,6 @@ Easy to integrate memory allocation library for Direct3D 12.
 
 **Product page:** [D3D12 Memory Allocator on GPUOpen](https://gpuopen.com/d3d12-memory-allocator/)
 
-[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.svg)](http://isitmaintained.com/project/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator "Average time to resolve an issue")
-
 # Problem
 
 Memory allocation and resource (buffer and texture) creation in new, explicit graphics APIs (Vulkan® and Direct3D 12) is difficult comparing to older graphics APIs like Direct3D 11 or OpenGL® because it is recommended to allocate bigger blocks of memory and assign parts of them to resources. [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/) is a library that implements this functionality for Vulkan. It is available online since 2017 and it is successfully used in many software projects, including some AAA game studios. This is an equivalent library for D3D12.
@@ -112,5 +110,6 @@ For more information see [NOTICES.txt](NOTICES.txt).
 - **[Godot Engine](https://github.com/godotengine/godot/)** - multi-platform 2D and 3D game engine. License: MIT.
 - **[The Forge](https://github.com/ConfettiFX/The-Forge)** - cross-platform rendering framework. Apache License 2.0.
 - **[Wicked Engine](https://github.com/turanszkij/WickedEngine)** - 3D engine with modern graphics
+- **[PCSX2](https://github.com/PCSX2/pcsx2)** - PlayStation 2 (PS2) emulator
 
 [Some other projects on GitHub](https://github.com/search?q=D3D12MemAlloc.h&type=Code) and some game development studios that use DX12 in their games.
