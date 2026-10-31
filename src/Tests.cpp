@@ -387,7 +387,7 @@ static void SaveStatsStringToFile(const TestContext& ctx, const wchar_t* dstFile
 static bool QueryMsaa64KBAlignedTextureSupported(const TestContext& ctx)
 {
     D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {};
-    CHECK_HR(ctx.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4)));
+    CHECK_HR(ctx.featureSupport->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4)));
     return options4.MSAA64KBAlignedTextureSupported != FALSE;
 }
 
@@ -2584,7 +2584,7 @@ static void TestMultithreading(const TestContext& ctx)
 static bool IsProtectedResourceSessionSupported(const TestContext& ctx)
 {
     D3D12_FEATURE_DATA_PROTECTED_RESOURCE_SESSION_SUPPORT support = {};
-    CHECK_HR(ctx.device->CheckFeatureSupport(
+    CHECK_HR(ctx.featureSupport->CheckFeatureSupport(
         D3D12_FEATURE_PROTECTED_RESOURCE_SESSION_SUPPORT, &support, sizeof support));
     return support.Support > D3D12_PROTECTED_RESOURCE_SESSION_SUPPORT_FLAG_NONE;
 }
@@ -3692,7 +3692,7 @@ static void TestDevice16(const TestContext& ctx)
     desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     TestDesc2Paths(ctx, device.Get(), desc);
     D3D12_FEATURE_DATA_D3D12_OPTIONS12 options12 = {};
-    if (SUCCEEDED(ctx.device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12, &options12, sizeof(options12))) &&
+    if (SUCCEEDED(ctx.featureSupport->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS12, &options12, sizeof(options12))) &&
         options12.RelaxedFormatCastingSupported)
     {
         const DXGI_FORMAT formats[] = {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB};
@@ -3703,7 +3703,7 @@ static void TestDevice16(const TestContext& ctx)
     D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msaa = {};
     msaa.Format = desc.Format;
     msaa.SampleCount = 4;
-    if (SUCCEEDED(ctx.device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &msaa, sizeof(msaa))) &&
+    if (SUCCEEDED(ctx.featureSupport->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &msaa, sizeof(msaa))) &&
         msaa.NumQualityLevels != 0)
     {
         desc.SampleDesc.Count = 4;
@@ -3784,7 +3784,7 @@ static void TestGuidTextureLayout(const TestContext& ctx)
             desc.LayoutGuid = guid;
             D3D12_FEATURE_DATA_GUID_TEXTURE_LAYOUT support = {};
             support.pDesc = &desc;
-            const HRESULT hr = ctx.device->CheckFeatureSupport(D3D12_FEATURE_GUID_TEXTURE_LAYOUT, &support, sizeof(support));
+            const HRESULT hr = ctx.featureSupport->CheckFeatureSupport(D3D12_FEATURE_GUID_TEXTURE_LAYOUT, &support, sizeof(support));
             if (FAILED(hr) || support.GuidTextureLayoutTier < D3D12_GUID_TEXTURE_LAYOUT_TIER_1 || !support.GuidSupported ||
                 (support.Support1 & D3D12_FORMAT_SUPPORT1_TEXTURE2D) == 0)
                 continue;

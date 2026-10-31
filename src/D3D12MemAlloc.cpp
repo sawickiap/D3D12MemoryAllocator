@@ -6287,6 +6287,8 @@ public:
 private:
     using PoolList = IntrusiveLinkedList<PoolListItemTraits>;
 
+    HRESULT CheckFeatureSupport(D3D12_FEATURE feature, void* featureSupportData, UINT featureSupportDataSize) const;
+
     const bool m_UseMutex;
     const bool m_AlwaysCommitted;
     const bool m_MsaaAlwaysCommitted;
@@ -6311,6 +6313,7 @@ private:
 #endif
 #ifdef __ID3D12Device16_INTERFACE_DEFINED__
     ID3D12Device16* m_Device16 = NULL;  // AddRef, optional
+    UINT m_SDKVersion = 0; // 0 selects legacy feature queries.
 #endif
     IDXGIAdapter* m_Adapter; // AddRef
 #if D3D12MA_DXGI_1_4
@@ -6452,6 +6455,18 @@ AllocatorPimpl::AllocatorPimpl(const ALLOCATION_CALLBACKS& allocationCallbacks, 
 
 HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
 {
+#ifdef __ID3D12Device16_INTERFACE_DEFINED__
+    m_Device->QueryInterface(D3D12MA_IID_PPV_ARGS(&m_Device16));
+#ifdef __ID3D12DeviceConfiguration_INTERFACE_DEFINED__
+    ID3D12DeviceConfiguration* deviceConfiguration = NULL;
+    if (SUCCEEDED(m_Device->QueryInterface(D3D12MA_IID_PPV_ARGS(&deviceConfiguration))))
+    {
+        m_SDKVersion = deviceConfiguration->GetDesc().SDKVersion;
+        deviceConfiguration->Release();
+    }
+#endif // #ifdef __ID3D12DeviceConfiguration_INTERFACE_DEFINED__
+#endif // #ifdef __ID3D12Device16_INTERFACE_DEFINED__
+
 #if D3D12MA_DXGI_1_4
     desc.pAdapter->QueryInterface(D3D12MA_IID_PPV_ARGS(&m_Adapter3));
 #endif
@@ -6470,7 +6485,7 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
     if((desc.Flags & ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED) != 0)
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {};
-        if(SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))))
+        if(SUCCEEDED(CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7, sizeof(options7))))
         {
             // DEFAULT_POOLS_NOT_ZEROED both supported and enabled by the user.
             m_DefaultPoolsNotZeroed = true;
@@ -6485,9 +6500,6 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
 #ifdef __ID3D12Device12_INTERFACE_DEFINED__
     m_Device->QueryInterface(D3D12MA_IID_PPV_ARGS(&m_Device12));
 #endif
-#ifdef __ID3D12Device16_INTERFACE_DEFINED__
-    m_Device->QueryInterface(D3D12MA_IID_PPV_ARGS(&m_Device16));
-#endif
 
     HRESULT hr = m_Adapter->GetDesc(&m_AdapterDesc);
     if (FAILED(hr))
@@ -6495,7 +6507,7 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
         return hr;
     }
 
-    hr = m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &m_D3D12Options, sizeof(m_D3D12Options));
+    hr = CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &m_D3D12Options, sizeof(m_D3D12Options));
     if (FAILED(hr))
     {
         return hr;
@@ -6507,7 +6519,7 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
 #if D3D12MA_OPTIONS16_SUPPORTED
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};
-        hr = m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options16, sizeof(options16));
+        hr = CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options16, sizeof(options16));
         if (SUCCEEDED(hr))
         {
             m_GPUUploadHeapSupported = options16.GPUUploadHeapSupported;
@@ -6518,7 +6530,7 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
 #if D3D12MA_OPTIONS4_SUPPORTED
     {
         D3D12_FEATURE_DATA_D3D12_OPTIONS4 options4 = {};
-        hr = m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4));
+        hr = CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS4, &options4, sizeof(options4));
         if (SUCCEEDED(hr))
         {
             m_MSAA64KBAlignedTextureSupported = options4.MSAA64KBAlignedTextureSupported;
@@ -6529,7 +6541,7 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
 #if D3D12MA_TIGHT_ALIGNMENT_SUPPORTED
     {
         D3D12_FEATURE_DATA_TIGHT_ALIGNMENT tightAlignment = {};
-        hr = m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_TIGHT_ALIGNMENT, &tightAlignment, sizeof(tightAlignment));
+        hr = CheckFeatureSupport(D3D12_FEATURE_D3D12_TIGHT_ALIGNMENT, &tightAlignment, sizeof(tightAlignment));
         if (SUCCEEDED(hr))
         {
             m_TightAlignmentSupported = tightAlignment.SupportTier >= D3D12_TIGHT_ALIGNMENT_TIER_1;
@@ -6538,7 +6550,7 @@ HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
     }
 #endif // #if D3D12MA_TIGHT_ALIGNMENT_SUPPORTED
 
-    hr = m_Device->CheckFeatureSupport(D3D12_FEATURE_ARCHITECTURE, &m_D3D12Architecture, sizeof(m_D3D12Architecture));
+    hr = CheckFeatureSupport(D3D12_FEATURE_ARCHITECTURE, &m_D3D12Architecture, sizeof(m_D3D12Architecture));
     if (FAILED(hr))
     {
         m_D3D12Architecture.UMA = FALSE;
@@ -6620,6 +6632,17 @@ AllocatorPimpl::~AllocatorPimpl()
             D3D12MA_ASSERT(0 && "Unfreed pools found!");
         }
     }
+}
+
+HRESULT AllocatorPimpl::CheckFeatureSupport(D3D12_FEATURE feature, void* featureSupportData, UINT featureSupportDataSize) const
+{
+#ifdef __ID3D12Device16_INTERFACE_DEFINED__
+    if (m_Device16 != NULL && m_SDKVersion != 0)
+    {
+        return m_Device16->CheckFeatureSupport1(feature, featureSupportData, featureSupportDataSize, m_SDKVersion);
+    }
+#endif
+    return m_Device->CheckFeatureSupport(feature, featureSupportData, featureSupportDataSize);
 }
 
 bool AllocatorPimpl::HeapFlagsFulfillResourceHeapTier(D3D12_HEAP_FLAGS flags) const
