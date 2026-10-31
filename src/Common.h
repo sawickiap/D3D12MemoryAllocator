@@ -75,6 +75,7 @@ class DeviceFeatureSupport
 {
 public:
     void Init(ID3D12Device* device);
+    void Reset();
     HRESULT CheckFeatureSupport(D3D12_FEATURE feature, void* featureSupportData, UINT featureSupportDataSize) const;
 
 private:

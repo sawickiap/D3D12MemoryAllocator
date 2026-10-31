@@ -1603,7 +1603,7 @@ void Cleanup() // release com ojects and clean up memory
         assert(g_CpuAllocationCount.load() == 0);
     }
     
-    g_FeatureSupport.Init(nullptr);
+    g_FeatureSupport.Reset();
     g_Device.Reset();
     g_SwapChain.Reset();
 }

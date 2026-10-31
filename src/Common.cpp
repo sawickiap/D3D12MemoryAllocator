@@ -24,22 +24,29 @@
 
 void DeviceFeatureSupport::Init(ID3D12Device* device)
 {
+    assert(device != nullptr);
     m_Device = device;
 #ifdef __ID3D12Device16_INTERFACE_DEFINED__
     m_Device16.Reset();
     m_SDKVersion = 0;
-    if (device != nullptr)
-    {
-        device->QueryInterface(IID_PPV_ARGS(&m_Device16));
+    device->QueryInterface(IID_PPV_ARGS(&m_Device16));
 #ifdef __ID3D12DeviceConfiguration_INTERFACE_DEFINED__
-        ComPtr<ID3D12DeviceConfiguration> deviceConfiguration;
-        if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&deviceConfiguration))))
-        {
-            m_SDKVersion = deviceConfiguration->GetDesc().SDKVersion;
-        }
-#endif
+    ComPtr<ID3D12DeviceConfiguration> deviceConfiguration;
+    if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&deviceConfiguration))))
+    {
+        m_SDKVersion = deviceConfiguration->GetDesc().SDKVersion;
     }
 #endif
+#endif
+}
+
+void DeviceFeatureSupport::Reset()
+{
+#ifdef __ID3D12Device16_INTERFACE_DEFINED__
+    m_Device16.Reset();
+    m_SDKVersion = 0;
+#endif
+    m_Device.Reset();
 }
 
 HRESULT DeviceFeatureSupport::CheckFeatureSupport(D3D12_FEATURE feature, void* featureSupportData, UINT featureSupportDataSize) const
