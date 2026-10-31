@@ -3,6 +3,7 @@
 - Added support for the new Agility SDK to 1.620.1 / 1.722.0-preview.
   - Added `Allocator::CreateResource4` and `CreateAliasingResource3` for `D3D12_RESOURCE_DESC2` and GUID texture layouts.
 - Added file `AGENTS.md` for agentic AI.
+- Fixed automatic `D3D12_RESOURCE_FLAG_USE_TIGHT_ALIGNMENT` being added to resource descriptions with explicit nonzero alignment, which is invalid on older Agility SDK runtimes (#101).
 - Other fixes and improvements.
 
 # 3.2.1 (2026-10-26)

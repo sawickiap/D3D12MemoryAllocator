@@ -893,11 +893,12 @@ enum POOL_FLAGS
     There is also an equivalent flag for the entire allocator: D3D12MA::ALLOCATOR_FLAG_ALWAYS_COMMITTED.
     */
     POOL_FLAG_ALWAYS_COMMITTED = 0x4,
-    /** Disables tight resource alignment for all resources created from this pool.
+    /** Disables automatic tight resource alignment for resources created from this pool.
     
-    When tight alignment is supported and enabled for the allocator, resources created from custom pools
-    normally use it automatically. Specify this flag to restore pre-tight-alignment behavior for this pool:
-    tight alignment won't be requested and small buffers may again be preferred as committed resources.
+    When tight alignment is supported and enabled for the allocator, eligible resources with
+    `Alignment == 0` normally use it automatically. Specify this flag to restore pre-tight-alignment behavior
+    for this pool: tight alignment won't be requested automatically and small buffers may again be preferred as committed resources.
+    A caller-supplied `D3D12_RESOURCE_FLAG_USE_TIGHT_ALIGNMENT` flag is preserved.
     */
     POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT = 0x8,
 
@@ -1125,20 +1126,21 @@ enum ALLOCATOR_FLAGS
     Passing this flag will disable this committed preference globally for the allocator.
     It can also be disabled for a single allocation by using #ALLOCATION_FLAG_STRATEGY_MIN_TIME.
 
-    If the tight resource alignment feature is used by the library (which happens automatically whenever supported,
+    If tight resource alignment is enabled for the allocator and the allocation's pool (automatically whenever supported,
     unless you use flag #ALLOCATOR_FLAG_DONT_USE_TIGHT_ALIGNMENT or
     #POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT on a custom pool), then small buffers are not preferred as committed.
     Long story short, you don't need to specify any of these flags.
     The library chooses the most optimal method automatically.
     */
     ALLOCATOR_FLAG_DONT_PREFER_SMALL_BUFFERS_COMMITTED = 0x10,
-    /** Disables the use of the tight alignment feature even when it is supported on the current system.
-    By default, the feature is used whenever available.
+    /** Disables automatic use of tight alignment even when it is supported on the current system.
+    By default, the feature is requested for eligible resources with `Alignment == 0` whenever available.
 
     Support can be checked by D3D12MA::Allocator::IsTightAlignmentSupported() regardless of using this flag.
 
-    This flag disables the usage of the tight alignment globally, including default and custom pools.
+    This flag disables automatic tight alignment globally, including default and custom pools.
     You can also disable it just for a specific custom pool by using D3D12MA::POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT.
+    A caller-supplied `D3D12_RESOURCE_FLAG_USE_TIGHT_ALIGNMENT` flag is preserved.
     */
     ALLOCATOR_FLAG_DONT_USE_TIGHT_ALIGNMENT = 0x20,
 };
@@ -2955,13 +2957,19 @@ Note this is a separate feature than the "small alignment" described earlier.
 When using this new SDK and a compatible graphics driver, the API exposes support for this new feature.
 Then, a new flag `D3D12_RESOURCE_FLAG_USE_TIGHT_ALIGNMENT` can be added when creating a resource.
 D3D12 can then return the alignment required for the resource smaller than the default ones described above.
-This library automatically makes use of the tight alignment feature for eligible resources when available and adds that new resource flag.
+
+This library automatically adds this flag to eligible resources when available, but only when the resource description `Alignment` is 0.
+If `Alignment` is nonzero, the library preserves it and does not automatically add the flag.
+This avoids invalid descriptor combinations on older tight-alignment runtimes, which require `Alignment == 0`.
+To use a nonzero alignment as a minimum alignment with tight alignment, explicitly specify `D3D12_RESOURCE_FLAG_USE_TIGHT_ALIGNMENT`
+and use a runtime that supports this combination (Agility SDK 1.619.4 / 1.721.2-preview or newer), with values allowed by that runtime.
+A caller-supplied tight-alignment flag is preserved, including when automatic tight alignment is disabled.
 GUID texture layouts are excluded from this automatic flag insertion; their allocation requirements come from the native descriptor query.
 When the tight alignment is enabled, the heuristics that creates small buffers as committed described above is deactivated,
 as it is no longer needed.
 
 You can check if the tight alignment it is available in the current system by calling D3D12MA::Allocator::IsTightAlignmentSupported().
-You can tell the library to not use it by specifying D3D12MA::ALLOCATOR_FLAG_DONT_USE_TIGHT_ALIGNMENT.
+You can disable automatic tight alignment by specifying D3D12MA::ALLOCATOR_FLAG_DONT_USE_TIGHT_ALIGNMENT.
 Custom pools can opt out independently by specifying D3D12MA::POOL_FLAG_DONT_USE_TIGHT_ALIGNMENT.
 Typically, you don't need to do any of those.
 

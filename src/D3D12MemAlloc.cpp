@@ -8199,7 +8199,8 @@ HRESULT AllocatorPimpl::GetResourceAllocationInfo(
 #ifdef __ID3D12Device1_INTERFACE_DEFINED__
 
 #if D3D12MA_TIGHT_ALIGNMENT_SUPPORTED
-    if (useTightAlignment)
+    // Older tight-alignment runtimes require Alignment == 0 (see issue #101).
+    if (useTightAlignment && inOutResourceDesc.Alignment == 0)
     {
         // Don't allow USE_TIGHT_ALIGNMENT together with ALLOW_CROSS_ADAPTER as there is a D3D Debug Layer error:
         // D3D12 ERROR: ID3D12Device::GetResourceAllocationInfo: D3D12_RESOURCE_DESC::Flag D3D12_RESOURCE_FLAG_USE_TIGHT_ALIGNMENT will be ignored since D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER is set. [ STATE_CREATION ERROR #599: CREATERESOURCE_INVALIDMISCFLAGS]
