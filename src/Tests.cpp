@@ -4140,6 +4140,40 @@ static void TestVirtualBlocks(const TestContext& ctx)
     block->FreeAllocation(alloc2);
 }
 
+static void TestVirtualBlocksLinearNullPrivateData(const TestContext& ctx)
+{
+    wprintf(L"Test linear virtual block statistics with null private data\n");
+
+    using namespace D3D12MA;
+
+    ComPtr<VirtualBlock> block;
+    const CVIRTUAL_BLOCK_DESC blockDesc{ 100, VIRTUAL_BLOCK_FLAG_ALGORITHM_LINEAR, ctx.allocationCallbacks };
+    CHECK_HR(CreateVirtualBlock(&blockDesc, &block));
+
+    VIRTUAL_ALLOCATION_DESC allocDesc = {};
+    allocDesc.Size = 10;
+    VirtualAllocation allocation;
+    CHECK_HR(block->Allocate(&allocDesc, &allocation, nullptr));
+
+    Statistics stats = {};
+    block->GetStatistics(&stats);
+    DetailedStatistics detailedStats = {};
+    block->CalculateStatistics(&detailedStats);
+
+    WCHAR* json = nullptr;
+    block->BuildStatsString(&json);
+    const std::wstring statsString(json);
+    block->FreeStatsString(json);
+    block->FreeAllocation(allocation);
+
+    CHECK_BOOL(stats.AllocationCount == 1);
+    CHECK_BOOL(stats.AllocationBytes == allocDesc.Size);
+    CHECK_BOOL(detailedStats.Stats.AllocationCount == stats.AllocationCount);
+    CHECK_BOOL(detailedStats.Stats.AllocationBytes == stats.AllocationBytes);
+    CHECK_BOOL(statsString.find(L"{\"Offset\": 0, \"Size\": 10}") != std::wstring::npos);
+    CHECK_BOOL(statsString.find(L"{\"Offset\": 10, \"Type\": \"FREE\", \"Size\": 90}") != std::wstring::npos);
+}
+
 static void TestVirtualBlocksAlgorithms(const TestContext& ctx)
 {
     wprintf(L"Test virtual blocks algorithms\n");
@@ -5260,6 +5294,7 @@ void TestDefragmentationIncrementalComplex(const TestContext& ctx)
 static void TestGroupVirtual(const TestContext& ctx)
 {
     TestVirtualBlocks(ctx);
+    TestVirtualBlocksLinearNullPrivateData(ctx);
     TestVirtualBlocksAlgorithms(ctx);
     TestVirtualBlocksAlgorithmsBenchmark(ctx);
 }
